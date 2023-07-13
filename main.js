@@ -1,8 +1,9 @@
 const { ethers} = require('ethers')
 const log4js = require('log4js');
-const ALCHEMY_MAINNET_WSSURL = 'ws://5.9.115.186:8546';
+// 5.9.115.186
+const ALCHEMY_MAINNET_WSSURL = 'ws://127.0.0.1:8546';
 const provider = new ethers.providers.WebSocketProvider(ALCHEMY_MAINNET_WSSURL);
-const provider1 = new ethers.providers.JsonRpcProvider('http://5.9.115.186:8545');
+const provider1 = new ethers.providers.JsonRpcProvider('http://127.0.0.1:8545');
 
 
 log4js.configure({
