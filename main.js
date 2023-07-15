@@ -64,7 +64,7 @@ const filterTxRes = (txRes) => {
 //hash:type:accessList:blockHash:blockNumber:transactionIndex:confirmations:from:
 //gasPrice:gasLimit:to:value:nonce:nonce:r:s:v:creates:chainId:wait:
 const processedTransaction$ = pendingTransaction$.pipe(
-  ops.tap(txHash => hashLogger.info(txHash)),
+  // ops.tap(txHash => hashLogger.info(txHash)),
   ops.mergeMap(txHash => httpProvider.getTransaction(txHash)),
   ops.filter(txRes => txRes),
   ops.filter(txRes => filterTxRes(txRes)),
