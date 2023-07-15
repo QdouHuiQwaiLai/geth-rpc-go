@@ -37,7 +37,7 @@ const usdtIface = new ethers.utils.Interface(usdtAbi);
 
 const filterTxRes = (txRes) => {
   const { hash ,type ,from, to, value, gasPrice, maxPriorityFeePerGas, maxFeePerGas, gasLimit, data, nonce } = txRes
-  console.log(hash, to)
+  // console.log(hash, to)
   const fromFlag = !f.from.length || f.from.includes(from.toLowerCase())
   const toFlag = !f.to.length || (to && f.to.includes(to.toLowerCase()))
   // console.log(fromFlag, toFlag)
