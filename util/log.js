@@ -1,9 +1,12 @@
-const log4js = require('log4js');
+import log4js from 'log4js'
+
 log4js.configure({
   appenders: {
     hash: { type: 'file', filename: './logs/hash',     pattern: '-yyyy-MM-dd-hh-mm.log', // 每分钟创建一个新文件
       alwaysIncludePattern: true,},
-    tx: { type: 'file', filename: './logs/tx',     pattern: '-yyyy-MM-dd-hh-mm.log', // 每分钟创建一个新文件
+    tx: { type: 'file', filename: './logs/tx',
+      // pattern: '-yyyy-MM-dd-hh-mm.log', // 每分钟创建一个新文件
+      pattern: '-yyyy-MM-dd.log',
       alwaysIncludePattern: true, },
     console: { type: 'console' },
   },
@@ -14,10 +17,6 @@ log4js.configure({
   },
 });
 
-const hashLogger = log4js.getLogger('hash');
-const txLogger = log4js.getLogger('tx');
+export const hashLogger = log4js.getLogger('hash')
+export const txLogger = log4js.getLogger('tx')
 
-module.exports = {
-  hashLogger: hashLogger,
-  txLogger: txLogger,
-}

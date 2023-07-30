@@ -1,9 +1,12 @@
-const { ethers} = require('ethers')
-const Rxjs= require('rxjs')
-const ops= require('rxjs/operators')
-const { hashLogger, txLogger } = require('./util/log')
+import {BigNumber, ethers} from 'ethers'
+import * as Rxjs from 'rxjs';
+import * as ops from 'rxjs/operators';
+import { hashLogger, txLogger } from './util/log.js';
+import usdtAbiJson from './usdtAbi.json' assert { type: 'json' };
+import {BehaviorSubject, of} from 'rxjs'
+import { isIncludedInAddressList } from './util/isIncludedInAddressList.js'
 // 5.9.115.186 127.0.0.1
-const host = '127.0.0.1'
+const host = '5.9.115.186'
 const wsProvider = new ethers.providers.WebSocketProvider(`ws://${host}:8546`);
 const httpProvider = new ethers.providers.JsonRpcProvider(`http://${host}:8545`);
 
@@ -14,52 +17,181 @@ const pendingTransaction$ = new Rxjs.Observable(subscriber => {
   })
 })
 
-const f = {
-  from: [],
-  to: ['0xdAC17F958D2ee523a2206206994597C13D831ec7'.toLowerCase(),],
+
+const usdtAddress = '0xdAC17F958D2ee523a2206206994597C13D831ec7'.toLowerCase()
+const usdcAddress = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'.toLowerCase()
+const addressAbis = [
+  {
+    'address': usdtAddress,
+    'abi': usdtAbiJson,
+  },
+  {
+    'address': usdcAddress,
+    'abi': usdtAbiJson,
+  }
+]
+
+const txFilterUsdt = {
+  name: 'usdt',
+  fromList: [],
+  toList: [usdtAddress,],
   gasPrice: 0,
   maxPriorityFeePerGas: 0,
   maxFeePerGas: 0,
   gasLimit: 0,
   value: 0,
+  conditions: [
+    {
+      "address": usdtAddress,
+      "name":"transfer",
+      "sighash":"0xa9059cbb",
+      "inputs": [
+        // {"name":"_to","type":"address","value":["0x6A747382ce8EB0255294e141d45EEfD8b1748ED1"]},
+        {"name":"_value","type":"uint256","value":"5000000000"}
+      ]
+    },
+    // {
+    //   "address": usdtAddress,
+    //   "name":"approve",
+    //   "sighash":"0x095ea7b3",
+    //   "inputs":[
+    //     // {"name":"_spender","type":"address","value":"[]"},
+    //     {"name":"_value","type":"uint256","value":"0"}
+    //   ]
+    // },
+    // {
+    //   "address": usdtAddress,
+    //   "name":"transfer",
+    //   "sighash":"0x",
+    // },
+  ],
   args: {},
 }
 
-const usdtAddress = '0xdAC17F958D2ee523a2206206994597C13D831ec7'.toLowerCase()
-const usdtAbi = [{"constant":true,"inputs":[],"name":"name","outputs":[{"name":"","type":"string"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[{"name":"_upgradedAddress","type":"address"}],"name":"deprecate","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":false,"inputs":[{"name":"_spender","type":"address"},{"name":"_value","type":"uint256"}],"name":"approve","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[],"name":"deprecated","outputs":[{"name":"","type":"bool"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[{"name":"_evilUser","type":"address"}],"name":"addBlackList","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[],"name":"totalSupply","outputs":[{"name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[{"name":"_from","type":"address"},{"name":"_to","type":"address"},{"name":"_value","type":"uint256"}],"name":"transferFrom","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[],"name":"upgradedAddress","outputs":[{"name":"","type":"address"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[{"name":"","type":"address"}],"name":"balances","outputs":[{"name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[],"name":"decimals","outputs":[{"name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[],"name":"maximumFee","outputs":[{"name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[],"name":"_totalSupply","outputs":[{"name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[],"name":"unpause","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[{"name":"_maker","type":"address"}],"name":"getBlackListStatus","outputs":[{"name":"","type":"bool"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[{"name":"","type":"address"},{"name":"","type":"address"}],"name":"allowed","outputs":[{"name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[],"name":"paused","outputs":[{"name":"","type":"bool"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[{"name":"who","type":"address"}],"name":"balanceOf","outputs":[{"name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[],"name":"pause","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[],"name":"getOwner","outputs":[{"name":"","type":"address"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[],"name":"owner","outputs":[{"name":"","type":"address"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[],"name":"symbol","outputs":[{"name":"","type":"string"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[{"name":"_to","type":"address"},{"name":"_value","type":"uint256"}],"name":"transfer","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":false,"inputs":[{"name":"newBasisPoints","type":"uint256"},{"name":"newMaxFee","type":"uint256"}],"name":"setParams","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":false,"inputs":[{"name":"amount","type":"uint256"}],"name":"issue","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":false,"inputs":[{"name":"amount","type":"uint256"}],"name":"redeem","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[{"name":"_owner","type":"address"},{"name":"_spender","type":"address"}],"name":"allowance","outputs":[{"name":"remaining","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[],"name":"basisPointsRate","outputs":[{"name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[{"name":"","type":"address"}],"name":"isBlackListed","outputs":[{"name":"","type":"bool"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[{"name":"_clearedUser","type":"address"}],"name":"removeBlackList","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[],"name":"MAX_UINT","outputs":[{"name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[{"name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":false,"inputs":[{"name":"_blackListedUser","type":"address"}],"name":"destroyBlackFunds","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"inputs":[{"name":"_initialSupply","type":"uint256"},{"name":"_name","type":"string"},{"name":"_symbol","type":"string"},{"name":"_decimals","type":"uint256"}],"payable":false,"stateMutability":"nonpayable","type":"constructor"},{"anonymous":false,"inputs":[{"indexed":false,"name":"amount","type":"uint256"}],"name":"Issue","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"name":"amount","type":"uint256"}],"name":"Redeem","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"name":"newAddress","type":"address"}],"name":"Deprecate","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"name":"feeBasisPoints","type":"uint256"},{"indexed":false,"name":"maxFee","type":"uint256"}],"name":"Params","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"name":"_blackListedUser","type":"address"},{"indexed":false,"name":"_balance","type":"uint256"}],"name":"DestroyedBlackFunds","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"name":"_user","type":"address"}],"name":"AddedBlackList","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"name":"_user","type":"address"}],"name":"RemovedBlackList","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"name":"owner","type":"address"},{"indexed":true,"name":"spender","type":"address"},{"indexed":false,"name":"value","type":"uint256"}],"name":"Approval","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"name":"from","type":"address"},{"indexed":true,"name":"to","type":"address"},{"indexed":false,"name":"value","type":"uint256"}],"name":"Transfer","type":"event"},{"anonymous":false,"inputs":[],"name":"Pause","type":"event"},{"anonymous":false,"inputs":[],"name":"Unpause","type":"event"}]
-const usdtIface = new ethers.utils.Interface(usdtAbi);
-// const data ='0x1a9059cbb000000000000000000000000d85d0da37b98f57e9c1a857be474cc9d11fdb40c00000000000000000000000000000000000000000000000000000000009477d0'
-// const parsed = usdtIface.parseTransaction({ data });
-// console.log(parsed)
-// console.log(parsed.name); // 输出方法名
-// console.log(parsed.args); // 输出参数列表
-// console.log(parsed.args['_value'].toString())
 
-const filterTxRes = (txRes) => {
-  const { hash ,type ,from, to, value, gasPrice, maxPriorityFeePerGas, maxFeePerGas, gasLimit, data, nonce } = txRes
-  // console.log(hash, to)
-  const fromFlag = !f.from.length || f.from.includes(from.toLowerCase())
-  const toFlag = !f.to.length || (to && f.to.includes(to.toLowerCase()))
-  // console.log(fromFlag, toFlag)
-  if(!(fromFlag && toFlag)){
-    return false
-  }
-  let parsed
-  try {
-    parsed = usdtIface.parseTransaction({data})
-  } catch (e) {
-    console.log(e)
-    return false
-  }
-  if (parsed.name === 'transfer') {
-    const _to = parsed.args['_to']
-    const _value = parsed.args['_value'].toString()
-    txLogger.info(`${hash} = ${from} ==> ${_to} 转移了 ${_value}`)
-  }
-  return true
-  // console.log(fromFlag, toFlag)
-  // return fromFlag && toFlag
+const txFilterUsdc = {
+  name: 'usdc',
+  fromList: [],
+  toList: [usdcAddress,],
+  gasPrice: 0,
+  maxPriorityFeePerGas: 0,
+  maxFeePerGas: 0,
+  gasLimit: 0,
+  value: 0,
+  conditions: [
+    {
+      "address": usdcAddress,
+      "name":"transfer",
+      "sighash":"0xa9059cbb",
+      "inputs": [
+        // {"name":"_to","type":"address","value":["0x6A747382ce8EB0255294e141d45EEfD8b1748ED1"]},
+        {"name":"_value","type":"uint256","value":"5000000000"}
+      ]
+    },
+    {
+      "address": usdcAddress,
+      "name":"approve",
+      "sighash":"0x095ea7b3",
+      "inputs":[
+        // {"name":"_spender","type":"address","value":"[]"},
+        {"name":"_value","type":"uint256","value":"0"}
+      ]
+    },
+    // {
+    //   "address": usdtAddress,
+    //   "name":"transfer",
+    //   "sighash":"0x",
+    // },
+  ],
+  args: {},
 }
+
+const txFilters = [txFilterUsdt, txFilterUsdc]
+
+  // [{"name":"approve","sighash":"0x095ea7b3","inputs":[{"name":"_spender","type":"address","value":""},{"name":"_value","type":"uint256","value":"0"}]}]
+const parseTxResData = (data, abi) => {
+  try {
+    const iFace = new ethers.utils.Interface(abi)
+    return iFace.parseTransaction({data: data})
+  } catch (e) {
+    // 对错误进行更详细的处理，可能包括记录日志、发送警报等
+    console.error(`Failed to parse and log transaction: ${e}`);
+    return false;
+  }
+}
+
+
+const filterArgInType = (parseDataArg, conditionArg, type) => {
+  switch (type) {
+    case 'address':
+      // console.log('111111')
+      return isIncludedInAddressList(conditionArg, parseDataArg)
+    case 'uint256':
+      // console.log('222222')
+      return parseDataArg.gte(BigNumber.from(conditionArg))
+  }
+  return false
+}
+
+const handleTxResFilterByFromTo = (from, to, txFilterFromList, txFilterToList) => {
+  return from && to && isIncludedInAddressList(txFilterFromList, from) && isIncludedInAddressList(txFilterToList, to)
+}
+
+const handleTxResParseData = (data, to) => {
+  const abi = addressAbis
+    .find(addressAbi => addressAbi.address.toLowerCase() === to.toLowerCase())?.abi ?? null
+  if (!abi) return null
+  const parsedData = parseTxResData(data, abi)
+  return parsedData ? parsedData : null
+}
+
+const handleTxResByDataCondition$ = (parseData, condition) => {
+  const sighash = parseData.sighash
+  const conditionSighash = condition.sighash
+  if (!(sighash === conditionSighash)) {
+    return Rxjs.EMPTY
+  }
+  const inputs = parseData.functionFragment.inputs
+  const conditionInputs = condition.inputs
+  for (let input of inputs) {
+    const { name, type } = input
+    const conditionArg = conditionInputs.find(conditionInput => conditionInput.name === name)?.value ?? null
+    if (!conditionArg) {
+      continue
+    }
+    const parseDataArg = parseData.args[name] ?? null
+    if (!parseDataArg) {
+      return Rxjs.EMPTY
+    }
+    if (!filterArgInType(parseDataArg, conditionArg, type)) {
+      return Rxjs.EMPTY
+    }
+  }
+  return Rxjs.of({
+    'name': parseData.name,
+    'value': parseData.value,
+    'args': parseData.args
+  })
+}
+
+
+
+const handleTxRes$ = (txRes, txFilter) => {
+  const { hash ,type ,from, to, value, gasPrice, maxPriorityFeePerGas, maxFeePerGas, gasLimit, data, nonce } = txRes
+  const { name: txFilterName, fromList: txFilterFromList, toList: txFilterToList, conditions} = txFilter
+  if (!handleTxResFilterByFromTo(from, to, txFilterFromList, txFilterToList)) {
+    return Rxjs.EMPTY
+  }
+  const parsedData= handleTxResParseData(data, to)
+
+  return Rxjs.from(conditions).pipe(
+    ops.mergeMap(condition => handleTxResByDataCondition$(parsedData, condition)),
+    ops.tap(({name, value, args}) => {
+      txLogger.info(`${txFilterName} ${hash}: ${name} ${from} => ${args[0]} : ${args[1].toString()}`)
+    }),
+  )
+}
+
 
 //hash:type:accessList:blockHash:blockNumber:transactionIndex:confirmations:from:
 //gasPrice:gasLimit:to:value:nonce:nonce:r:s:v:creates:chainId:wait:
@@ -67,19 +199,31 @@ const processedTransaction$ = pendingTransaction$.pipe(
   // ops.tap(txHash => hashLogger.info(txHash)),
   ops.mergeMap(txHash => httpProvider.getTransaction(txHash)),
   ops.filter(txRes => txRes),
-  ops.filter(txRes => filterTxRes(txRes)),
-  // ops.tap(txRes => txLogger.info(txRes)),
-  // ops.tap(txRes => txLogger.debug(`hash: ${txRes.hash} ==== ${txRes.from}`)),
-  // ops.tap(txRes => {console.log(txRes.to)})
-
+  ops.mergeMap(txRes => txFilters.map(txFilter => ({txRes, txFilter}))),
+  ops.mergeMap(({txRes, txFilter}) => handleTxRes$(txRes, txFilter)),
 )
 
 processedTransaction$.subscribe({
   // next: data => console.log(data),
-  // complete: () => console.log('完成')
+  complete: () => console.log('完成')
 })
-//
 
+
+// handleTxResByDataCondition$(
+//   parseTxResData(
+//     '0xa9059cbb0000000000000000000000006a747382ce8eb0255294e141d45eefd8b1748ed1000000000000000000000000000000000000000000000000000000b471513260',
+//     usdtIface),
+//   conditions).subscribe(console.log)
+
+// const conditions =  {
+//   "name":"transfer",
+//   "sighash":"0xa9059cbb",
+//   "inputs": [
+//       // {"name":"_to","type":"address","value":["0x6A747382ce8EB0255294e141d45EEfD8b1748ED1"]},
+//       {"name":"_value","type":"uint256","value":"500000000"}
+//     ]
+// }
+// const parseData = parseTxResData('0xa9059cbb0000000000000000000000006a747382ce8eb0255294e141d45eefd8b1748ed1000000000000000000000000000000000000000000000000000000b471513260',
 
 
 
