@@ -12,6 +12,7 @@
   "license": "ISC",
   "dependencies": {
     "ethers": "^5.7.1",
+    "lodash": "^4.17.21",
     "log4js": "^6.9.1",
     "rxjs": "^7.8.1"
   }
