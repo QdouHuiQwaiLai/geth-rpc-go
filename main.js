@@ -1,10 +1,9 @@
 import {BigNumber, ethers} from 'ethers'
 import * as Rxjs from 'rxjs';
 import * as ops from 'rxjs/operators';
-import { hashLogger, txLogger } from './util/log.js';
-import usdtAbiJson from './usdtAbi.json' assert { type: 'json' };
+import { hashLogger, txLogger, errLogger } from './util/log.js';
+import { db_abi_mapping, db_tx_filter ,db_get_abi_map$, db_get_tx_filter_list$ } from './util/db.js';
 import _ from 'lodash'
-import {BehaviorSubject, of} from 'rxjs'
 import { isIncludedInAddressList } from './util/isIncludedInAddressList.js'
 // 5.9.115.186 127.0.0.1
 const host = '5.9.115.186'
@@ -12,115 +11,22 @@ const wsProvider = new ethers.providers.WebSocketProvider(`ws://${host}:8546`);
 const httpProvider = new ethers.providers.JsonRpcProvider(`http://${host}:8545`);
 
 
-const pendingTransaction$ = new Rxjs.Observable(subscriber => {
+const pendingTransaction$ = () => new Rxjs.Observable(subscriber => {
   wsProvider.on('pending', txHash => {
     subscriber.next(txHash)
   })
 })
 
-
-const usdtAddress = '0xdAC17F958D2ee523a2206206994597C13D831ec7'.toLowerCase()
-const usdcAddress = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'.toLowerCase()
-const addressAbis = [
-  {
-    'address': usdtAddress,
-    'abi': usdtAbiJson,
-  },
-  {
-    'address': usdcAddress,
-    'abi': usdtAbiJson,
-  }
-]
-
-const txFilterUsdt = {
-  name: 'usdt',
-  fromList: [],
-  toList: [usdtAddress,],
-  gasPrice: 0,
-  maxPriorityFeePerGas: 0,
-  maxFeePerGas: 0,
-  gasLimit: 0,
-  value: 0,
-  conditions: [
-    {
-      "address": usdtAddress,
-      "name":"transfer",
-      "sighash":"0xa9059cbb",
-      "inputs": [
-        // {"name":"_to","type":"address","value":["0x6A747382ce8EB0255294e141d45EEfD8b1748ED1"]},
-        {"name":"_value","type":"uint256","value":"5000000000"}
-      ]
-    },
-    // {
-    //   "address": usdtAddress,
-    //   "name":"approve",
-    //   "sighash":"0x095ea7b3",
-    //   "inputs":[
-    //     // {"name":"_spender","type":"address","value":"[]"},
-    //     {"name":"_value","type":"uint256","value":"0"}
-    //   ]
-    // },
-    // {
-    //   "address": usdtAddress,
-    //   "name":"transfer",
-    //   "sighash":"0x",
-    // },
-  ],
-  args: {},
-}
-
-
-const txFilterUsdc = {
-  name: 'usdc',
-  fromList: [],
-  toList: [usdcAddress,],
-  gasPrice: 0,
-  maxPriorityFeePerGas: 0,
-  maxFeePerGas: 0,
-  gasLimit: 0,
-  value: 0,
-  conditions: [
-    {
-      "address": usdcAddress,
-      "name":"transfer",
-      "sighash":"0xa9059cbb",
-      "inputs": [
-        // {"name":"_to","type":"address","value":["0x6A747382ce8EB0255294e141d45EEfD8b1748ED1"]},
-        {"name":"_value","type":"uint256","value":"5000000000"}
-      ]
-    },
-    {
-      "address": usdcAddress,
-      "name":"approve",
-      "sighash":"0x095ea7b3",
-      "inputs":[
-        // {"name":"_spender","type":"address","value":"[]"},
-        {"name":"_value","type":"uint256","value":"0"}
-      ]
-    },
-    // {
-    //   "address": usdtAddress,
-    //   "name":"transfer",
-    //   "sighash":"0x",
-    // },
-  ],
-  args: {},
-}
-
-const txFilters = [txFilterUsdt, txFilterUsdc]
-
-  // [{"name":"approve","sighash":"0x095ea7b3","inputs":[{"name":"_spender","type":"address","value":""},{"name":"_value","type":"uint256","value":"0"}]}]
-const parseTxResData = (data, abi) => {
+const parseTxResData$ = (data, abi) => {
   try {
     const iFace = new ethers.utils.Interface(abi)
-    return iFace.parseTransaction({data: data})
+    return Rxjs.of(iFace.parseTransaction({data: data}))
   } catch (e) {
     // 对错误进行更详细的处理，可能包括记录日志、发送警报等
     console.error(`Failed to parse and log transaction: ${e}`);
-    return null
+    return Rxjs.EMPTY
   }
 }
-
 
 const filterArgInType = (parseDataArg, conditionArg, type) => {
   switch (type) {
@@ -136,13 +42,6 @@ const filterArgInType = (parseDataArg, conditionArg, type) => {
 
 const handleTxResFilterByFromTo = (from, to, txFilterFromList, txFilterToList) => {
   return from && to && isIncludedInAddressList(txFilterFromList, from) && isIncludedInAddressList(txFilterToList, to)
-}
-
-const handleTxResParseData = (data, to) => {
-  const abi = addressAbis
-    .find(addressAbi => addressAbi.address.toLowerCase() === to.toLowerCase())?.abi ?? null
-  if (!abi) return null
-  return parseTxResData(data, abi)
 }
 
 const handleTxResByDataCondition$ = (parseData, condition) => {
@@ -187,20 +86,41 @@ const handleTxResByDataCondition$ = (parseData, condition) => {
   })
 }
 
+const getAbiByTo$ =  (to, db_get_abi_map$) =>
+  db_get_abi_map$(to).pipe(
+    // 取出abi
+    ops.map(_ => _.abi),
+    // 验证abi是否存在
+    ops.filter(abi => !!abi),
+  )
 
+// const txFilterList
 
 const handleTxRes$ = (txRes, txFilter) => {
   const { hash ,type ,from, to, value, gasPrice, maxPriorityFeePerGas, maxFeePerGas, gasLimit, data, nonce } = txRes
-  const { name: txFilterName, fromList: txFilterFromList, toList: txFilterToList, conditions} = txFilter
+  const { name: txFilterName, fromList: txFilterFromList, toList: txFilterToList, condition, isEthTransfer } = txFilter
   // 对比地址数据
   if (!handleTxResFilterByFromTo(from, to, txFilterFromList, txFilterToList)) {
     return Rxjs.EMPTY
   }
-  // 解析txRes.data 如果解析成功返回数据 失败返回null
-  const parsedData= handleTxResParseData(data, to)
 
-  return Rxjs.from(conditions).pipe(
-    ops.mergeMap(condition => handleTxResByDataCondition$(parsedData, condition)),
+  if (isEthTransfer) {
+    return Rxjs.of(0).pipe(
+      ops.tap(({name, value, args}) => {
+        txLogger.info(`${txFilterName} ${hash}: 转账事件}`)
+      }),
+    )
+  }
+
+  // 根据to地址获取abi$
+  const abi$ = getAbiByTo$(to, db_get_abi_map$)
+
+  const handleTxResParseData$ = (data, abi$) => abi$.pipe(
+    ops.mergeMap(abi => parseTxResData$(data, abi))
+  )
+
+  return  handleTxResParseData$(data, abi$).pipe(
+    ops.mergeMap(parsedData => handleTxResByDataCondition$(parsedData, condition)),
     ops.tap(({name, value, args}) => {
       txLogger.info(`${txFilterName} ${hash}: ${name} ${from} => ${args[0]} : ${args[1].toString()}`)
     }),
@@ -210,60 +130,37 @@ const handleTxRes$ = (txRes, txFilter) => {
 
 //hash:type:accessList:blockHash:blockNumber:transactionIndex:confirmations:from:
 //gasPrice:gasLimit:to:value:nonce:nonce:r:s:v:creates:chainId:wait:
-const processedTransaction$ = pendingTransaction$.pipe(
+const createProcessedTransaction$ = () => new Rxjs.Observable(subscriber => {
+  wsProvider.on('pending', txHash => {
+    subscriber.next(txHash)
+  })
+}).pipe(
   // ops.tap(txHash => hashLogger.info(txHash)),
   // 获取hash详情
   ops.mergeMap(txHash => httpProvider.getTransaction(txHash)),
+  // ops.tap(console.log),
   // 验证hash是否有数据
   ops.filter(txRes => !!txRes),
-  // txRes => [{txFilter1, res}, {txFilter2, res}, ... ]
-  ops.mergeMap(txRes => txFilters.map(txFilter => ({txRes, txFilter}))),
-  // 处理
+  ops.mergeMap(txRes => db_get_tx_filter_list$().pipe(
+      ops.mergeMap(txFilterList => txFilterList.map(txFilter => ({txRes, txFilter}))),
+    )
+  ),
   ops.mergeMap(({txRes, txFilter}) => handleTxRes$(txRes, txFilter)),
+  ops.retry(1),
+  ops.catchError(err => {
+    // 在这里添加错误的日志记录
+    errLogger.error(`Error occurred: ${err.message}`);
+    return createProcessedTransaction$()
+  }),
 )
 
+const processedTransaction$ = createProcessedTransaction$()
 processedTransaction$.subscribe({
   // next: data => console.log(data),
   complete: () => console.log('完成')
 })
 
-// var users = [
-//   { 'user': 'barney',  'age': 36, 'active': true },
-//   { 'user': 'fred',    'age': 40, 'active': false },
-//   { 'user': 'pebbles', 'age': 1,  'active': true }
-// ];
-//
-// // _.find(users, function(o) { return o.age < 40; });
-// // => object for 'barney'
-//
-// // The `_.matches` iteratee shorthand.
-// console.log( _.find(users, { 'age': 2, 'active': true },));
-// => object for 'pebbles'
-
-
-// console.log( _.get({'a': 1}, 'b', null))
-// console.log(_.isNull(null))
-// console.log(_.isNull(false))
-// console.log(_.isNull(undefined))
-// console.log(_.isNull(NaN))
-// handleTxResByDataCondition$(
-//   parseTxResData(
-//     '0xa9059cbb0000000000000000000000006a747382ce8eb0255294e141d45eefd8b1748ed1000000000000000000000000000000000000000000000000000000b471513260',
-//     usdtIface),
-//   conditions).subscribe(console.log)
-
-// const conditions =  {
-//   "name":"transfer",
-//   "sighash":"0xa9059cbb",
-//   "inputs": [
-//       // {"name":"_to","type":"address","value":["0x6A747382ce8EB0255294e141d45EEfD8b1748ED1"]},
-//       {"name":"_value","type":"uint256","value":"500000000"}
-//     ]
-// }
-// const parseData = parseTxResData('0xa9059cbb0000000000000000000000006a747382ce8eb0255294e141d45eefd8b1748ed1000000000000000000000000000000000000000000000000000000b471513260',
-
-
-
+// errLogger.error(`Error occurred:`);
 
 
 
