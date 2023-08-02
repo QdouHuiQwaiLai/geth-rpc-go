@@ -24,7 +24,7 @@ const parseTxResData$ = (data, abi) => {
   } catch (e) {
     // 对错误进行更详细的处理，可能包括记录日志、发送警报等
     console.error(`Failed to parse and log transaction: ${e}`);
-    return Rxjs.EMPTY
+    return Rxjs.NVNER
   }
 }
 
@@ -50,11 +50,11 @@ const handleTxResByDataCondition$ = (parseData, condition) => {
   const conditionSighash = _.get(condition, 'sighash', null)
   // 如果没有获取到函数标识
   if (_.isNull(sighash) || _.isNull(conditionSighash)) {
-    return Rxjs.EMPTY
+    return Rxjs.NEVER
   }
   // 如果函数标识不一样
   if (sighash !== conditionSighash) {
-    return Rxjs.EMPTY
+    return Rxjs.NEVER
   }
   // 解析后数据到inputs
   const inputs =_.get(parseData, 'functionFragment.inputs', null)
@@ -72,11 +72,11 @@ const handleTxResByDataCondition$ = (parseData, condition) => {
     // 取出解析里面到变量值
     const parseDataArg = _.get(parseData, `args.${name}`, null)
     if (_.isNull(parseDataArg)) { // 如果没有获取这个值 直接返回空
-      return Rxjs.EMPTY
+      return Rxjs.NEVER
     }
     // 进行对比
     if (!filterArgInType(parseDataArg, conditionArg, type)) {
-      return Rxjs.EMPTY
+      return Rxjs.NEVER
     }
   }
   return Rxjs.of({
@@ -101,7 +101,7 @@ const handleTxRes$ = (txRes, txFilter) => {
   const { name: txFilterName, fromList: txFilterFromList, toList: txFilterToList, condition, isEthTransfer } = txFilter
   // 对比地址数据
   if (!handleTxResFilterByFromTo(from, to, txFilterFromList, txFilterToList)) {
-    return Rxjs.EMPTY
+    return Rxjs.NEVER
   }
 
   if (isEthTransfer) {
